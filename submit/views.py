@@ -694,12 +694,12 @@ def project_requeue(request, project):
              permission='authenticated')
 @validate(project=EditableDBThing('project_id', Project, source=MATCHDICT))
 def project_scores(request, project):
-    rows = ['Name, Email, Group ID, Score (On Time), Score']
+    rows = ['Name,Email,Group ID,Score (On Time),Score']
     _, best_ontime, best = project.process_submissions()
     for group, (sub, points) in best.items():
         on_time = best_ontime[group][1] if group in best_ontime else ''
         for user in group.users:
-            rows.append('{}, {}, {}, {}, {}'
+            rows.append('{},{},{},{},{}'
                         .format(user.name, user.username, group.id,
                                 points, on_time))
     disposition = 'attachment; filename="{0}.csv"'.format(project.name)
