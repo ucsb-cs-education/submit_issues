@@ -8,7 +8,7 @@ from .helpers import get_queue_func
 from .models import configure_sql, create_schema, populate_database
 from .security import get_user, group_finder
 
-__version__ = '1.2.0'
+__version__ = '1.0.3'
 
 
 class Root(object):
@@ -79,7 +79,7 @@ def main(global_config, **settings):
     engine = engine_from_config(settings, 'sqlalchemy.')
     configure_sql(engine)
 
-    secure_cookies = settings.get('secure_cookies') != 'false'
+    secure_cookies = True
     if 'pyramid_debugtoolbar' in settings['pyramid.includes']:
         create_schema(global_config['__file__'])
         populate_database()
