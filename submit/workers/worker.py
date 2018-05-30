@@ -21,7 +21,7 @@ RESULTS_PATH = 'results'
 EXECUTION_FILES_PATH = 'execution_files'
 
 MAX_FILE_SIZE = 81920
-TIME_LIMIT = 4
+TIME_LIMIT = 8
 
 # Prepare Child Environemtn to disable CCACHE
 CHILD_ENV = os.environ.copy()
@@ -29,7 +29,7 @@ CHILD_ENV.update(CCACHE_DISABLE='1')
 
 
 def log_msg(msg):
-    print('{} {}'.format(datetime.now(), msg))
+    print('{} {} TIME_LIMIT={}'.format(datetime.now(), msg, TIME_LIMIT))
 
 
 class TimeoutAlarm(Exception):
@@ -43,7 +43,7 @@ def alarm_handler(_, _a):
 class Worker(object):
     @staticmethod
     def execute(command, stderr=None, stdin=None, stdout=None, files=None,
-                save=None):
+                save=None, log=None):
         if not stderr:
             stderr = open('/dev/null', 'w')
         if not stdout:
@@ -73,10 +73,17 @@ class Worker(object):
 
         # Hacks to give more time to some scripts:
         time_limit = TIME_LIMIT
+
         if args[0] in ('valgrind',):
             time_limit *= 2
+        elif args[0]=='./kos':
+            time_limit = 60
         elif len(args) > 2 and args[1] == 'turtle_capture.sh':
             time_limit *= 4  # How can we run this faster?
+
+        if (log):
+            log.write('worker.execute: {date} args[0]={args0} time_limit={time_limit}\n'
+                     .format(date=datetime.now(), args0=args[0], time_limit=time_limit))
 
         # Run command with a timelimit
         # TODO: Do we only get partial output with stdout?
@@ -124,13 +131,18 @@ class Worker(object):
                     shutil.copy(src, save[1])
             shutil.rmtree(tmp_dir)
 
-    def __init__(self):
+    def __init__(self, log):
+        self.log = log
         # Load testable information
         os.chdir('working')
         with open('data.json') as fp:
             self.data = json.load(fp)
 
     def run(self):
+
+        self.log.write('worker.run: {date} {key} executable={executable}\n'
+                     .format(date=datetime.now(), key=self.data['key'], executable=self.data['executable']))
+
         # Build and run tests
         os.mkdir(RESULTS_PATH)
         result = {}
@@ -196,9 +208,9 @@ class Worker(object):
                         stdout = None
                         stderr = output
                     execute(tc['args'], stderr=stderr, stdin=stdin,
-                            stdout=stdout)
+                            stdout=stdout, log=self.log)
             else:
-                execute(tc['args'], save=(tc['output_filename'], output_file))
+                execute(tc['args'], save=(tc['output_filename'], output_file), log=self.log)
                 if tc['output_filename'].endswith('.png'):
                     max_file_size = 131072  # Avoid truncating images
 
@@ -241,7 +253,7 @@ class TimeoutException(Exception):
 
 def main():
     with open('worker.log', 'a') as fp:
-        wp = Worker()
+        wp = Worker(fp)
         status = 'failed'
         start = time.time()
         try:

@@ -407,7 +407,7 @@ class Project(BasicBase, Base):
     makefile = relationship(File, backref='makefile_for_projects')
     makefile_id = Column(Integer, ForeignKey('file.id'), nullable=True)
     name = Column(Unicode, nullable=False)
-    status = Column(Enum('locked', 'notready', 'ready', name='proj_status'),
+    status = Column(Enum('locked', 'notready', 'ready', name='status'),
                     nullable=False, server_default='notready')
     submissions = relationship('Submission', backref='project',
                                cascade='all, delete-orphan')

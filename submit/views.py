@@ -1071,6 +1071,10 @@ def submission_view(request, submission, as_user):
     else:
         prev_group = next_group = None
 
+
+    if not submission_admin and submission.project.name[0:4]=="EXAM":
+       files = {}
+
     return {'diff_table': diff_table,
             'extra_files': extra_files,
             'files': files,

@@ -1,4 +1,3 @@
-import time
 import amqp_worker
 import json
 import os
@@ -58,11 +57,6 @@ class WorkerProxy():
 
         self.base_file_path = settings['file_directory']
         self.private_key_file = settings['ssh_priv_key']
-        self.sleep_short_min = int(settings['sleep_short_min'])
-        self.sleep_short_max = int(settings['sleep_short_max'])
-        self.sleep_long_min = int(settings['sleep_long_min'])
-        self.sleep_long_max = int(settings['sleep_long_max'])
-
         self.account = args.worker_account
         machines = settings['worker_machines']
         if isinstance(machines, basestring):
@@ -84,22 +78,13 @@ class WorkerProxy():
 
         worker.handle_command(args.command)
 
-
-    def get_short_sleep(self):
-       return random.uniform(self.sleep_short_min,self.sleep_short_max) 
-
-    def get_long_sleep(self):
-        return random.uniform(self.sleep_long_min,self.sleep_long_max) 
-
-
-
     @workers.wrapper
     def do_work(self, submission_id, testable_id, update_project=False):
         # Verify job
         submission = Submission.fetch_by_id(submission_id)
         if not submission:
-            raise HandledError('Invalid submission id: {0}'
-                               .format(submission_id))
+            raise HandledError('Invalid submission id: {0}'.format(submission_id))
+
         testable = Testable.fetch_by_id(testable_id)
         if not testable:
             raise HandledError('Invalid testable id: {0}'.format(testable_id))
@@ -115,11 +100,8 @@ class WorkerProxy():
             # Fetch the best machine
             priority, machine = heappop(self.machines)
             # Log the start of the job
-            start_time = time.time()
-            workers.log_msg('{}.{} begin ({}) {} {} {} {}'
-                            .format(submission_id, testable_id, machine,
-                                    submission.project.class_.name,submission.project.name,submission.created_by.name,testable.name ))
-
+            workers.log_msg('{}.{} begin ({})'
+                            .format(submission_id, testable_id, machine))
             log_type = 'unhandled'
             try:
                 # Kill any processes on the worker
@@ -127,7 +109,6 @@ class WorkerProxy():
                 # Copy the files to the worker (and remove existing files)
                 self.push_files(machine, submission, testable)
                 # Run the remote worker
-
                 self.ssh(machine, 'python worker.py')
                 # Fetch and generate the results
                 self.fetch_results(machine, submission, testable,
@@ -138,35 +119,21 @@ class WorkerProxy():
                 attempt += 1
                 log_type = 'timeout'
                 priority += 10
-            except Exception:  # Increase priority and re-raise the exception
+            except Exception:  # Increase priority and rereaise the exception
                 log_type = 'exception'
                 priority += 5
-                sleep_time = self.get_long_sleep()
-                workers.log_msg('{}.{} {}  ({}) ({} sleep) {} {} {} {}'.format(submission_id,
-                                    testable_id, 'exception_sleep', sleep_time,
-                                    machine, 
-                                    submission.project.class_.name,submission.project.name,submission.created_by.name,testable.name ))
-                time.sleep(sleep_time)
                 raise
             finally:
                 # Add the machine back to the queue
                 heappush(self.machines, (priority, machine))
                 # Log the end of the job
-                elapsed_time = time.time() - start_time
-                workers.log_msg('{}.{} {} ({}) ({} sec) {} {} {} {}'.format(submission_id,
-                                    testable_id, log_type,
-                                    machine, elapsed_time,
-                                    submission.project.class_.name,submission.project.name,submission.created_by.name,testable.name ))
+                workers.log_msg('{}.{} {} ({})'.format(submission_id,
+                                                       testable_id, log_type,
+                                                       machine))
         raise Exception('{}.{} timed out 16 times.'
                         .format(submission_id, testable_id))
 
     def fetch_results(self, machine, submission, testable, update_project):
-
-        workers.log_msg('{}.{} {} ({}) {} {} {} {}'.format(submission.id,
-                                    testable.id, 'fetch_results',
-                                    machine, 
-                                    submission.project.class_.name,submission.project.name,submission.created_by.name,testable.name ))
-
         # Rsync to retrieve results
         self.rsync(machine)
         os.chdir('results')
@@ -226,9 +193,6 @@ class WorkerProxy():
             raise Exception('killall did not work as expected')
         except subprocess.CalledProcessError as exc:
             if exc.returncode != 255 or exc.output.strip() != expected:
-                sleep_time = self.get_short_sleep()
-                workers.log_msg('kill_processes exc.returncode={} sleep={} output={}'.format(exc.returncode,sleep_time,exc.output.strip()))
-                time.sleep(sleep_time)
                 raise Exception('killall status: {} ({})'
                                 .format(exc.returncode, exc.output.strip()))
         return time.time() - start
@@ -301,12 +265,6 @@ class WorkerProxy():
         self.rsync(machine, from_local=True)
 
     def rsync(self, machine, from_local=False):
-
-        sleep_time = self.get_short_sleep()
-        time.sleep(sleep_time)
-        workers.log_msg('rsync machine={} sleep={}'.format(machine,sleep_time))
-
-
         src = '{}@{}:working/'.format(self.account, machine)
         dst = '.'
         if from_local:
@@ -316,11 +274,6 @@ class WorkerProxy():
         subprocess.check_call(cmd, stdout=open(os.devnull, 'w'), shell=True)
 
     def ssh(self, machine, command, timeout=None):
-
-        sleep_time = self.get_short_sleep()
-        time.sleep(sleep_time)
-        workers.log_msg('ssh machine={} command={} sleep={}'.format(machine,command,sleep_time))
-
         options = '-o ConnectTimeout={}'.format(timeout) if timeout else ''
         cmd = 'ssh -i {key} {options} {user}@{host} {command}'.format(
             key=self.private_key_file, user=self.account, host=machine,
